@@ -1,0 +1,172 @@
+<!doctype html>
+<!--
+  ILLYR phone setup page. Host this one file anywhere with HTTPS (e.g. GitHub Pages).
+  The TV's QR code opens it as  <this page>#<kind>.<channel>.<key>
+    kind     s = online subtitles, p = provider
+    channel  random ntfy.sh topic the TV is listening on
+    key      one-time AES-GCM key (base64url). The part after # is never sent to any server.
+  Details are encrypted here before they leave the phone; the relay only carries ciphertext.
+-->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>ILLYR Setup</title>
+<style>
+:root { color-scheme: dark; --bg:#0d0e10; --card:#1a1b1f; --line:#2c2e34; --text:#f4f4f6; --dim:#9a9ca4; --accent:#e9e9ee; --ok:#4cd471; --bad:#ff6b6b; }
+* { box-sizing: border-box; }
+body { margin:0; min-height:100vh; background: radial-gradient(120% 60% at 50% 0%, #24262c, var(--bg)); color: var(--text);
+  font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 28px 16px 40px; }
+main { max-width: 440px; margin: 0 auto; }
+.brand { font-weight: 800; letter-spacing: .32em; font-size: 15px; color: var(--dim); }
+h1 { font-size: 28px; margin: 6px 0 6px; }
+p.lead { color: var(--dim); margin: 0 0 22px; }
+.seg { display:flex; background: var(--card); border:1px solid var(--line); border-radius: 12px; padding: 4px; margin-bottom: 18px; }
+.seg button { flex:1; border:0; background:none; color: var(--dim); font: inherit; font-weight:600; padding: 10px; border-radius: 9px; }
+.seg button.on { background: var(--text); color: #111; }
+label { display:block; font-size: 14px; font-weight: 600; color: var(--dim); margin: 14px 2px 6px; }
+input { width:100%; font: inherit; color: var(--text); background: var(--card); border:1px solid var(--line); border-radius: 12px; padding: 13px 14px; }
+input:focus { outline: none; border-color: #6b6e78; }
+.hint { font-size: 13px; color: var(--dim); margin: 6px 2px 0; }
+.hint a { color: var(--accent); }
+button.go { width:100%; margin-top: 24px; border:0; border-radius: 14px; padding: 15px; font: inherit; font-weight: 700; background: var(--text); color:#111; }
+button.go:disabled { opacity: .5; }
+.status { margin-top: 18px; padding: 14px 16px; border-radius: 12px; background: var(--card); border:1px solid var(--line); display:none; }
+.status.ok { border-color: var(--ok); color: var(--ok); }
+.status.bad { border-color: var(--bad); color: var(--bad); }
+.status.show { display:block; }
+.lock { margin-top: 22px; font-size: 13px; color: var(--dim); text-align: center; }
+.hide { display:none; }
+</style></head>
+<body><main>
+<div class="brand">ILLYR</div>
+<div id="gone" class="hide"><h1 id="goneTitle">Scan the QR code on your TV</h1><p class="lead" id="goneText">Open Settings in ILLYR and choose “Set Up from Your Phone”, then scan the code with your phone’s camera.</p></div>
+<form id="f" class="hide" autocomplete="off">
+  <h1 id="title"></h1><p class="lead" id="lead"></p>
+  <div id="subs" class="hide">
+    <label for="os_user">OpenSubtitles username</label><input id="os_user" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <label for="os_pass">Password</label><input id="os_pass" type="password">
+    <label for="os_key">API key</label><input id="os_key" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <p class="hint">Create one at <a href="https://www.opensubtitles.com/en/consumers" target="_blank" rel="noopener">opensubtitles.com/consumers</a> (sign in, then “New consumer”), and paste it here.</p>
+  </div>
+  <div id="prov" class="hide">
+    <div class="seg"><button type="button" data-t="xtream" class="on">Xtream Codes</button><button type="button" data-t="m3u">M3U Playlist</button></div>
+    <div id="xt">
+      <label for="x_server">Server address</label><input id="x_server" type="url" inputmode="url" placeholder="http://host:port" autocapitalize="none" autocorrect="off" spellcheck="false">
+      <label for="x_user">Username</label><input id="x_user" autocapitalize="none" autocorrect="off" spellcheck="false">
+      <label for="x_pass">Password</label><input id="x_pass" type="password">
+    </div>
+    <div id="m3" class="hide">
+      <label for="m_url">Playlist link</label><input id="m_url" type="url" inputmode="url" placeholder="http://…/get.php?…" autocapitalize="none" autocorrect="off" spellcheck="false">
+      <label for="m_epg">TV guide (EPG) link</label><input id="m_epg" type="url" inputmode="url" placeholder="Optional" autocapitalize="none" autocorrect="off" spellcheck="false">
+    </div>
+    <label for="p_name">Name</label><input id="p_name" placeholder="Optional">
+  </div>
+  <button class="go" id="go" type="submit">Send to TV</button>
+  <div class="status" id="st"></div>
+  <p class="lock">Encrypted on this phone with a key only your TV has.</p>
+</form>
+</main>
+<script>
+(function () {
+  'use strict';
+  // Dev override: ?relay=http://localhost:port
+  var RELAY = (location.search.match(/[?&]relay=([^&]+)/) || [])[1];
+  RELAY = RELAY ? decodeURIComponent(RELAY) : 'https://ntfy.sh';
+  var parts = location.hash.replace(/^#/, '').split('.'), kind = { s: 'subs', p: 'provider' }[parts[0]];
+  var topic = parts[1], keyText = parts[2], type = 'xtream', key = null, since = '', poll = null;
+  function $(id) { return document.getElementById(id); }
+
+  function b64u(bytes) { var s = ''; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64u(t) { t = t.replace(/-/g, '+').replace(/_/g, '/'); while (t.length % 4) t += '='; var s = atob(t), b = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
+  function seal(obj) {
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(JSON.stringify(obj))).then(function (ct) {
+      var all = new Uint8Array(12 + ct.byteLength); all.set(iv); all.set(new Uint8Array(ct), 12); return b64u(all);
+    });
+  }
+  function open(text) {
+    var all = unb64u(text);
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: all.slice(0, 12) }, key, all.slice(12)).then(function (pt) { return JSON.parse(new TextDecoder().decode(pt)); });
+  }
+
+  if (!kind || !/^[a-z0-9]{12,40}$/.test(topic || '') || !keyText || !window.crypto || !crypto.subtle) {
+    $('gone').classList.remove('hide');
+    if (kind && !(window.crypto && crypto.subtle)) { $('goneTitle').textContent = 'This browser can’t encrypt'; $('goneText').textContent = 'Open the link in Safari or Chrome.'; }
+    return;
+  }
+  crypto.subtle.importKey('raw', unb64u(keyText), 'AES-GCM', false, ['encrypt', 'decrypt']).then(function (k) { key = k; }, function () {
+    $('f').classList.add('hide'); $('gone').classList.remove('hide');
+  });
+  $('f').classList.remove('hide');
+  if (kind === 'subs') {
+    $('title').textContent = 'Online subtitles'; $('lead').textContent = 'Your OpenSubtitles.com login. The TV signs in to check it, then keeps it.';
+    $('subs').classList.remove('hide');
+  } else {
+    $('title').textContent = 'Add a provider'; $('lead').textContent = 'The details from your IPTV provider. The TV checks the login before saving it.';
+    $('prov').classList.remove('hide');
+  }
+  [].forEach.call(document.querySelectorAll('.seg button'), function (b) {
+    b.onclick = function () {
+      type = b.getAttribute('data-t');
+      [].forEach.call(document.querySelectorAll('.seg button'), function (o) { o.classList.toggle('on', o === b); });
+      $('xt').classList.toggle('hide', type !== 'xtream'); $('m3').classList.toggle('hide', type !== 'm3u');
+    };
+  });
+  function status(text, cls) { var s = $('st'); s.textContent = text; s.className = 'status show ' + (cls || ''); }
+  function v(id) { return $(id).value.trim(); }
+
+  $('f').onsubmit = function (e) {
+    e.preventDefault();
+    var data;
+    if (kind === 'subs') {
+      data = { username: v('os_user'), password: $('os_pass').value, apiKey: v('os_key') };
+      if (!data.username || !data.password || !data.apiKey) return status('Fill in the username, password and API key.', 'bad');
+    } else if (type === 'xtream') {
+      data = { type: 'xtream', server: v('x_server'), username: v('x_user'), password: $('x_pass').value, name: v('p_name') };
+      if (!data.server || !data.username || !data.password) return status('Fill in the server address, username and password.', 'bad');
+    } else {
+      data = { type: 'm3u', url: v('m_url'), epg: v('m_epg'), name: v('p_name') };
+      if (!data.url) return status('Fill in the playlist link.', 'bad');
+    }
+    if (!key) return status('Still preparing. Try again in a moment.', 'bad');
+    $('go').disabled = true;
+    status('Sending to your TV…');
+    seal(data).then(function (box) {
+      return fetch(RELAY + '/' + topic, { method: 'POST', body: 'd:' + box });
+    }).then(function (r) {
+      if (!r.ok) throw new Error('Could not send (' + r.status + '). Try again.');
+      return r.json();
+    }).then(function (m) {
+      since = m.id;
+      status('Waiting for the TV…');
+      watch();
+    }).catch(function (err) { $('go').disabled = false; status(err.message || 'Could not send. Check your connection.', 'bad'); });
+  };
+
+  // The TV answers on the same channel with an encrypted "s:" message.
+  function watch() {
+    var tries = 0, finished = false;
+    clearInterval(poll);
+    poll = setInterval(function () {
+      if (++tries > 40) { clearInterval(poll); $('go').disabled = false; return status('The TV didn’t answer. Is the QR code still on screen?', 'bad'); }
+      fetch(RELAY + '/' + topic + '/json?poll=1&since=' + since).then(function (r) { return r.text(); }).then(function (t) {
+        t.split('\n').forEach(function (line) {
+          if (!line) return;
+          var m; try { m = JSON.parse(line); } catch (e) { return; }
+          if (m.event !== 'message' || !m.message) return;
+          since = m.id;
+          if (m.message.indexOf('s:') !== 0) return;
+          open(m.message.slice(2)).then(function (s) {
+            if (finished) return;
+            if (s.state === 'checking') { status('The TV is checking the details…'); return; }
+            finished = true;
+            clearInterval(poll);
+            if (s.ok) status('✓ ' + (s.message || 'Done') + '. You can close this page.', 'ok');
+            else { $('go').disabled = false; status(s.message || 'That didn’t work.', 'bad'); }
+          }, function () {});
+        });
+      }).catch(function () {});
+    }, 3000);
+  }
+})();
+</script></body></html>
