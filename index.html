@@ -8,6 +8,12 @@
   Details are encrypted here before they leave the phone; the relay only carries ciphertext.
 -->
 <html lang="en"><head><meta charset="utf-8">
+<script>
+  // zhagravica.github.io/ILLYR on its own is the download page. The TV's QR codes open this setup
+  // page with #s.… (subtitles) or #p.… (provider) after the address.
+  if (!/^#[sp]\./.test(location.hash)) location.replace('download.html' + location.search);
+</script>
+<link rel="canonical" href="https://zhagravica.github.io/ILLYR/download.html">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
 <title>ILLYR Setup</title>
