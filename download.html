@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!--
+  ILLYR for Android: the download page (GitHub Pages, zhagravica.github.io/ILLYR/download.html).
+  The TV and the app show a QR code that opens it. The button always fetches the newest APK
+  (GitHub Releases, "latest"); the version and notes are read from the GitHub API.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0e10">
+<title>ILLYR for Android</title>
+<style>
+:root { color-scheme: dark; --bg:#0d0e10; --card:#17191c; --line:#2a2c32; --text:#f5f5f7; --dim:#9a9ca4; --ok:#4cd471; }
+* { box-sizing: border-box; }
+body { margin:0; min-height:100vh; background: radial-gradient(120% 55% at 50% 0%, #26282f, var(--bg)); color: var(--text);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: calc(env(safe-area-inset-top) + 36px) 18px 48px; }
+main { max-width: 460px; margin: 0 auto; text-align: center; }
+.logo { width: 132px; height: auto; }
+.word { display:block; margin: 14px auto 0; font-weight: 800; letter-spacing: .36em; font-size: 18px; padding-left: .36em; }
+h1 { font-size: 27px; margin: 26px 0 6px; }
+.sub { color: var(--dim); margin: 0 0 26px; }
+.btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding: 16px; border-radius: 14px; background: #f5f5f7; color:#111214;
+  font-weight: 800; font-size: 17px; text-decoration:none; }
+.btn:active { opacity: .85; }
+.btn svg { width: 22px; height: 22px; }
+.ver { margin-top: 10px; font-size: 13.5px; color: var(--dim); min-height: 20px; }
+.card { margin-top: 26px; text-align:left; background: var(--card); border:1px solid var(--line); border-radius: 16px; padding: 18px 18px 6px; }
+.card h2 { font-size: 15px; margin: 0 0 10px; letter-spacing: .02em; }
+ol { margin: 0; padding-left: 20px; color: var(--dim); font-size: 14.5px; }
+li { margin-bottom: 10px; }
+li b { color: var(--text); }
+.note { margin-top: 18px; font-size: 13px; color: var(--dim); }
+.iphone { display:none; }
+.is-ios .iphone { display:block; }
+.is-ios .android-only { opacity: .5; }
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="logo-wings.svg" alt="">
+  <span class="word">ILLYR</span>
+  <h1>ILLYR for Android</h1>
+  <p class="sub">Live TV, movies and series from your IPTV provider, in step with ILLYR on your TV.</p>
+
+  <div class="card iphone"><h2>On an iPhone?</h2><ol style="list-style:none;padding:0"><li>ILLYR for iPhone isn't available yet. Open this page on an Android phone to install it.</li></ol></div>
+
+  <a class="btn android-only" id="dl" href="https://github.com/Zhagravica/ILLYR/releases/latest/download/ILLYR.apk">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+    Download ILLYR
+  </a>
+  <div class="ver" id="ver"></div>
+
+  <div class="card android-only">
+    <h2>Install in a minute</h2>
+    <ol>
+      <li>Tap <b>Download ILLYR</b>. If Chrome asks, choose <b>Download anyway</b>.</li>
+      <li>Open the downloaded file (<b>ILLYR.apk</b>) from the notification.</li>
+      <li>Android asks to allow installs from your browser: tap <b>Settings</b>, turn on <b>Allow from this source</b>, go back.</li>
+      <li>Tap <b>Install</b>, then <b>Open</b>.</li>
+      <li>Have ILLYR on your TV? Choose <b>Copy from My TV</b> and scan the QR code under the TV's <b>Settings › Sync › Link a Phone</b>.</li>
+    </ol>
+  </div>
+  <p class="note">ILLYR updates itself: when a new version is out, the app offers it on launch.</p>
+</main>
+<script>
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent)) document.body.classList.add('is-ios');
+  fetch('https://api.github.com/repos/Zhagravica/ILLYR/releases/latest').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    if (!d) return;
+    var a = (d.assets || []).filter(function (x) { return /\.apk$/i.test(x.name); })[0];
+    var size = a ? ' · ' + (a.size / 1048576).toFixed(1) + ' MB' : '';
+    document.getElementById('ver').textContent = 'Version ' + String(d.tag_name || '').replace(/^v/, '') + size + ' · ' + new Date(d.published_at).toLocaleDateString();
+  }).catch(function () {});
+</script>
+</body>
+</html>
